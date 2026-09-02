@@ -1,0 +1,17 @@
+# Segredos — NUNCA versionar
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Logs
+*.log
+api.log
+
+# Sistema
+.DS_Store
+Thumbs.db
