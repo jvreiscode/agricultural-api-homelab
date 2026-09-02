@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cadastro - Fazenda</title>
+<style>
+  :root {
+    --verde: #2e7d32;
+    --verde-escuro: #1b5e20;
+    --cinza: #f4f4f4;
+    --texto: #222;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, Roboto, Arial, sans-serif;
+    background: var(--cinza);
+    margin: 0;
+    padding: 16px;
+    color: var(--texto);
+  }
+  h1 {
+    font-size: 1.4rem;
+    color: var(--verde-escuro);
+    margin-bottom: 4px;
+  }
+  .subtitulo { color: #666; margin-bottom: 20px; font-size: 0.9rem; }
+  .card {
+    background: white;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+  label {
+    display: block;
+    font-weight: 600;
+    margin: 12px 0 4px;
+    font-size: 0.9rem;
+  }
+  select, input, textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    font-size: 1rem;
+  }
+  button {
+    background: var(--verde);
+    color: white;
+    border: none;
+    padding: 14px;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    width: 100%;
+    margin-top: 16px;
+    cursor: pointer;
+  }
+  button:active { background: var(--verde-escuro); }
+  button.secundario {
+    background: white;
+    color: var(--verde-escuro);
+    border: 1px solid var(--verde);
+  }
+  .msg {
+    padding: 12px;
+    border-radius: 8px;
+    margin-top: 12px;
+    font-size: 0.9rem;
+    display: none;
+  }
+  .msg.sucesso { background: #e8f5e9; color: var(--verde-escuro); display: block; }
+  .msg.erro { background: #ffebee; color: #c62828; display: block; }
+  .registro {
+    border-bottom: 1px solid #eee;
+    padding: 8px 0;
+    font-size: 0.85rem;
+  }
+  .registro:last-child { border-bottom: none; }
+  .config {
+    font-size: 0.85rem;
+    color: #666;
+  }
+  .config input { margin-top: 4px; }
+  details summary { cursor: pointer; font-weight: 600; color: var(--verde-escuro); }
+  textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    resize: vertical;
+  }
+  table.resultado {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+  }
+  table.resultado th, table.resultado td {
+    border: 1px solid #ddd;
+    padding: 6px 8px;
+    text-align: left;
+    white-space: nowrap;
+  }
+  table.resultado th {
+    background: var(--cinza);
+    position: sticky;
+    top: 0;
+  }
+  .visao-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid #eee;
+    font-size: 0.9rem;
+  }
+  .visao-item:last-child { border-bottom: none; }
+</style>
+</head>
+<body>
+
+<h1>🌾 Cadastro da Fazenda</h1>
+<div class="subtitulo">Preencha e envie direto pro banco de dados</div>
+
+<div class="card">
+  <details>
+    <summary>⚙️ Configuração da API</summary>
+    <div class="config">
+      <label>Endereço da API (URL base)</label>
+      <input id="apiBase" placeholder="http://127.0.0.1:8000">
+      <label>Chave da API (X-API-Key, se configurada)</label>
+      <input id="apiKey" placeholder="deixe em branco se não usar">
+      <button class="secundario" onclick="salvarConfig()">Salvar configuração</button>
+    </div>
+  </details>
+</div>
+
+<div class="card">
+  <details>
+    <summary>📊 Visão geral do banco</summary>
+    <div id="visaoGeral" style="margin-top:12px;">Carregando...</div>
+    <button class="secundario" onclick="carregarVisaoGeral()" style="margin-top:12px;">🔄 Atualizar</button>
+  </details>
+</div>
+
+<div class="card">
+  <details>
+    <summary>🖥️ Console SQL</summary>
+    <div style="margin-top:12px;">
+      <label>Comando SQL</label>
+      <textarea id="sqlInput" rows="4" placeholder="SELECT * FROM fazendas;" style="font-family: monospace; font-size:0.9rem;"></textarea>
+      <button onclick="executarSql()">▶️ Executar</button>
+      <div id="msgSql" class="msg"></div>
+      <div id="resultadoSql" style="margin-top:12px; overflow-x:auto;"></div>
+    </div>
+  </details>
+</div>
+
+<div class="card">
+  <label>Tabela</label>
+  <select id="tabelaSelect" onchange="carregarFormulario()">
+    <option value="">Carregando tabelas...</option>
+  </select>
+</div>
+
+<div class="card" id="formCard" style="display:none;">
+  <div id="campos"></div>
+  <button onclick="enviarDados()">💾 Salvar registro</button>
+  <div id="msgForm" class="msg"></div>
+</div>
+
+<div class="card" id="listaCard" style="display:none;">
+  <details>
+    <summary>📋 Últimos registros</summary>
+    <div id="listaRegistros" style="margin-top:12px;"></div>
+  </details>
+</div>
+
+<script>
+let colunasAtuais = [];
+
+function getApiBase() {
+  return localStorage.getItem('apiBase') || window.location.origin;
+}
+function getApiKey() {
+  return localStorage.getItem('apiKey') || '';
+}
+function salvarConfig() {
+  localStorage.setItem('apiBase', document.getElementById('apiBase').value.trim());
+  localStorage.setItem('apiKey', document.getElementById('apiKey').value.trim());
+  alert('Configuração salva!');
+  carregarTabelas();
+}
+
+async function chamarApi(caminho, opcoes = {}) {
+  const headers = opcoes.headers || {};
+  const apiKey = getApiKey();
+  if (apiKey) headers['X-API-Key'] = apiKey;
+  if (opcoes.body) headers['Content-Type'] = 'application/json';
+  const resp = await fetch(getApiBase() + caminho, { ...opcoes, headers });
+  if (!resp.ok) {
+    const erro = await resp.json().catch(() => ({ detail: resp.statusText }));
+    throw new Error(erro.detail || 'Erro na requisição');
+  }
+  return resp.json();
+}
+
+async function carregarTabelas() {
+  const select = document.getElementById('tabelaSelect');
+  try {
+    const dados = await chamarApi('/tables');
+    select.innerHTML = '<option value="">Selecione uma tabela</option>' +
+      dados.tables.map(t => `<option value="${t}">${t}</option>`).join('');
+  } catch (e) {
+    select.innerHTML = '<option value="">Erro ao carregar (veja config da API)</option>';
+  }
+}
+
+async function carregarFormulario() {
+  const tabela = document.getElementById('tabelaSelect').value;
+  const formCard = document.getElementById('formCard');
+  const listaCard = document.getElementById('listaCard');
+  if (!tabela) { formCard.style.display = 'none'; listaCard.style.display = 'none'; return; }
+
+  const schema = await chamarApi(`/tables/${tabela}/schema`);
+  colunasAtuais = schema.columns;
+
+  const campos = document.getElementById('campos');
+  campos.innerHTML = colunasAtuais
+    .filter(c => c.name !== 'id')  // id é gerado automaticamente
+    .map(c => {
+      const tipoInput = c.type.includes('timestamp') || c.type.includes('date')
+        ? (c.type.includes('date') && !c.type.includes('timestamp') ? 'date' : 'datetime-local')
+        : (c.type.includes('int') || c.type.includes('numeric') || c.type.includes('double') ? 'number' : 'text');
+      return `
+        <label>${c.name}${c.nullable ? '' : ' *'}</label>
+        <input data-campo="${c.name}" type="${tipoInput}" ${tipoInput === 'number' ? 'step="any"' : ''}>
+      `;
+    }).join('');
+
+  formCard.style.display = 'block';
+  listaCard.style.display = 'block';
+  carregarUltimosRegistros(tabela);
+}
+
+async function carregarUltimosRegistros(tabela) {
+  const div = document.getElementById('listaRegistros');
+  try {
+    const dados = await chamarApi(`/${tabela}?limit=5`);
+    if (!dados.data.length) { div.innerHTML = '<em>Nenhum registro ainda.</em>'; return; }
+    div.innerHTML = dados.data.map(r =>
+      `<div class="registro">${Object.entries(r).map(([k, v]) => `<b>${k}</b>: ${v ?? '-'}`).join(' | ')}</div>`
+    ).join('');
+  } catch (e) {
+    div.innerHTML = `<em>Erro ao carregar registros: ${e.message}</em>`;
+  }
+}
+
+async function enviarDados() {
+  const tabela = document.getElementById('tabelaSelect').value;
+  const msg = document.getElementById('msgForm');
+  const inputs = document.querySelectorAll('[data-campo]');
+  const data = {};
+  inputs.forEach(inp => {
+    if (inp.value !== '') data[inp.dataset.campo] = inp.value;
+  });
+
+  try {
+    await chamarApi(`/${tabela}`, { method: 'POST', body: JSON.stringify({ data }) });
+    msg.textContent = '✅ Registro salvo com sucesso!';
+    msg.className = 'msg sucesso';
+    inputs.forEach(inp => inp.value = '');
+    carregarUltimosRegistros(tabela);
+  } catch (e) {
+    msg.textContent = '❌ Erro: ' + e.message;
+    msg.className = 'msg erro';
+  }
+}
+
+async function carregarVisaoGeral() {
+  const div = document.getElementById('visaoGeral');
+  div.innerHTML = 'Carregando...';
+  try {
+    const dados = await chamarApi('/overview');
+    if (!dados.tables.length) { div.innerHTML = '<em>Nenhuma tabela encontrada.</em>'; return; }
+    div.innerHTML = dados.tables.map(t =>
+      `<div class="visao-item"><b>${t.table}</b><span>${t.rows} registro(s) · ${t.columns} coluna(s)</span></div>`
+    ).join('');
+  } catch (e) {
+    div.innerHTML = `<em>Erro: ${e.message}</em>`;
+  }
+}
+
+async function executarSql() {
+  const query = document.getElementById('sqlInput').value.trim();
+  const msg = document.getElementById('msgSql');
+  const resultado = document.getElementById('resultadoSql');
+  if (!query) return;
+
+  msg.style.display = 'none';
+  resultado.innerHTML = 'Executando...';
+
+  try {
+    const dados = await chamarApi('/sql', { method: 'POST', body: JSON.stringify({ query }) });
+
+    if (dados.message) {
+      msg.textContent = '✅ ' + dados.message;
+      msg.className = 'msg sucesso';
+      resultado.innerHTML = '';
+      return;
+    }
+
+    if (!dados.rows || !dados.rows.length) {
+      resultado.innerHTML = '<em>A consulta não retornou linhas.</em>';
+      return;
+    }
+
+    const colunas = dados.columns;
+    resultado.innerHTML = `
+      <table class="resultado">
+        <thead><tr>${colunas.map(c => `<th>${c}</th>`).join('')}</tr></thead>
+        <tbody>
+          ${dados.rows.map(r => `<tr>${colunas.map(c => `<td>${r[c] ?? ''}</td>`).join('')}</tr>`).join('')}
+        </tbody>
+      </table>
+    `;
+  } catch (e) {
+    msg.textContent = '❌ Erro: ' + e.message;
+    msg.className = 'msg erro';
+    resultado.innerHTML = '';
+  }
+}
+
+// Inicialização
+document.getElementById('apiBase').value = getApiBase();
+document.getElementById('apiKey').value = getApiKey();
+carregarTabelas();
+carregarVisaoGeral();
+</script>
+
+</body>
+</html>
